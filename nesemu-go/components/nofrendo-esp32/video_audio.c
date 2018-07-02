@@ -49,7 +49,9 @@
 #include "../odroid/odroid_system.h"
 #include "../odroid/odroid_display.h"
 #include "../odroid/odroid_input.h"
+#include "esp_log.h"
 
+static const char *TAG = "nofrendo-esp32/video_audio";
 
 #define DEFAULT_SAMPLERATE   32000
 #define  DEFAULT_FRAGSIZE     512
@@ -237,56 +239,52 @@ static void free_write(int num_dirties, rect_t *dirty_rects)
    bmp_destroy(&myBitmap);
 }
 
-static uint8_t lcdfb[256 * 224];
 static void custom_blit(bitmap_t *bmp, int num_dirties, rect_t *dirty_rects) {
-    if (bmp->line[0] != NULL)
-    {
-        memcpy(lcdfb, bmp->line[0], 256 * 224);
-
-        void* arg = (void*)lcdfb;
-    	xQueueSend(vidQueue, &arg, portMAX_DELAY);
-    }
+   if (bmp->line[0] != NULL)
+   {
+      xQueueSend(vidQueue, &(bmp->line[0]), portMAX_DELAY);
+      ESP_LOGD(TAG, "xQueueSend bmp(%p) to queue.", (void *)bmp->line[0]);
+   }
 }
 
 
 //This runs on core 1.
 volatile bool exitVideoTaskFlag = false;
 static void videoTask(void *arg) {
-    uint8_t* bmp = NULL;
+   uint8_t* bmp = NULL;
 
-    while(1)
-	{
-		xQueuePeek(vidQueue, &bmp, portMAX_DELAY);
+   while(1)
+   {
+      BaseType_t hasReceivedItem = xQueuePeek(vidQueue, &bmp, portMAX_DELAY);
+      if (bmp == 1)
+         break;
+      if (hasReceivedItem)
+      {
+         ili9341_write_frame_nes(bmp, myPalette);
+         ESP_LOGD(TAG, "Sent bmp(%p) over SPI.", (void *)bmp);
+         odroid_input_battery_level_read(&battery);
+         xQueueReceive(vidQueue, &bmp, portMAX_DELAY);
+      }
+   }
 
-        if (bmp == 1) break;
+   send_continue_wait();
 
-        ili9341_write_frame_nes(bmp, myPalette);
+   // Draw hourglass
+   send_reset_drawing((320 / 2 - 48 / 2), 96, 48, 48);
 
-        odroid_input_battery_level_read(&battery);
+   // split in half to fit transaction size limit
+   uint16_t* icon = image_hourglass_empty_black_48dp.pixel_data;
 
-		xQueueReceive(vidQueue, &bmp, portMAX_DELAY);
-	}
+   send_continue_line(icon, 48, 24);
+   send_continue_line(icon + 24 * 48, 48, 24);
 
+   send_continue_wait();
 
+   exitVideoTaskFlag = true;
 
-    send_continue_wait();
+   vTaskDelete(NULL);
 
-    // Draw hourglass
-    send_reset_drawing((320 / 2 - 48 / 2), 96, 48, 48);
-
-    // split in half to fit transaction size limit
-    uint16_t* icon = image_hourglass_empty_black_48dp.pixel_data;
-
-    send_continue_line(icon, 48, 24);
-    send_continue_line(icon + 24 * 48, 48, 24);
-
-    send_continue_wait();
-
-    exitVideoTaskFlag = true;
-
-    vTaskDelete(NULL);
-
-    while(1){}
+   while(1){}
 }
 
 

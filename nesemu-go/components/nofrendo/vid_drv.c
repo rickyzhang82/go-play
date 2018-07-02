@@ -30,13 +30,15 @@
 #include <vid_drv.h>
 #include <gui.h>
 #include <osd.h>
+#include "esp_log.h"
 
+static const char *TAG = "nofrendo/vid_drv";
 
 /* hardware surface */
 static bitmap_t *screen = NULL;
 
 /* primary / backbuffer surfaces */
-static bitmap_t *primary_buffer = NULL; //, *back_buffer = NULL;
+static bitmap_t *primary_buffer = NULL, *back_buffer = NULL;
 
 static viddriver_t *driver = NULL;
 
@@ -353,14 +355,18 @@ void vid_flush(void)
    }
 
    if (driver->custom_blit)
+   {
       driver->custom_blit(primary_buffer, num_dirties, dirty_rects);
+   }
    else
+   {
       vid_blitscreen(num_dirties, dirty_rects);
+   }
 
    /* Swap pointers to the main/back buffers */
-//   temp = back_buffer;
-//   back_buffer = primary_buffer;
-//   primary_buffer = temp;
+   temp = back_buffer;
+   back_buffer = primary_buffer;
+   primary_buffer = temp;
 }
 
 /* emulated machine tells us which resolution it wants */
@@ -368,26 +374,27 @@ int vid_setmode(int width, int height)
 {
    if (NULL != primary_buffer)
       bmp_destroy(&primary_buffer);
-//   if (NULL != back_buffer)
-//      bmp_destroy(&back_buffer);
+   if (NULL != back_buffer)
+      bmp_destroy(&back_buffer);
 
    primary_buffer = bmp_create(width, height, 0); /* no overdraw */
    if (NULL == primary_buffer)
    {
        abort();
-      //return -1;
-  }
+       return -1;
+   }
+   ESP_LOGD(TAG, "primary_buffer is created at %p.", (void *)primary_buffer);
 
    /* Create our backbuffer */
-#if 0
-   back_buffer = bmp_create(width, height, 0); /* no overdraw */
+   back_buffer = bmp_create_from_back_frame_buffer(width, height, 0); /* no overdraw */
    if (NULL == back_buffer)
    {
       bmp_destroy(&primary_buffer);
       return -1;
    }
+   ESP_LOGD(TAG, "back_buffer is created at %p.", (void *)back_buffer);
+
    bmp_clear(back_buffer, GUI_BLACK);
-#endif
    bmp_clear(primary_buffer, GUI_BLACK);
 
    return 0;
@@ -417,8 +424,7 @@ static int vid_findmode(int width, int height, viddriver_t *osd_driver)
    if (driver->free_write)
       driver->free_write(-1, NULL);
 
-   log_printf("video driver: %s at %dx%d\n", driver->name,
-              screen->width, screen->height);
+   ESP_LOGD(TAG, "video driver: %s at %dx%d", driver->name, screen->width, screen->height);
 
    return 0;
 }
@@ -428,11 +434,10 @@ int vid_init(int width, int height, viddriver_t *osd_driver)
 {
    if (vid_findmode(width, height, osd_driver))
    {
-      log_printf("video initialization failed for %s at %dx%d\n",
-                 osd_driver->name, width, height);
+      ESP_LOGE(TAG, "video initialization failed for %s at %dx%d", osd_driver->name, width, height);
       return -1;
    }
-	log_printf("vid_init done\n");
+   ESP_LOGI(TAG, "vid_init done!");
 
    return 0;
 }

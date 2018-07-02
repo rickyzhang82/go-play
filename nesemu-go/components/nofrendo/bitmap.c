@@ -28,6 +28,11 @@
 #include <string.h>
 #include <noftypes.h>
 #include <bitmap.h>
+#include "esp_log.h"
+#include "esp_attr.h"
+
+
+static const char *TAG = "nofrendo/bitmap";
 
 void bmp_clear(const bitmap_t *bitmap, uint8 color)
 {
@@ -76,28 +81,38 @@ static bitmap_t *_make_bitmap(uint8 *data_addr, bool hw, int width,
 }
 
 /* Allocate and initialize a bitmap structure */
-#define FRAME_BUFFER_LENGTH ((256 + (2 * 8)) * 240)
-uint8 frameBuffer[FRAME_BUFFER_LENGTH];
-bitmap_t *bmp_create(int width, int height, int overdraw)
+#define FRAME_BUFFER_LENGTH ((256 + 2 * 8) * 240)
+DMA_ATTR uint8 primaryFrameBuffer[FRAME_BUFFER_LENGTH];
+DMA_ATTR uint8 backFrameBuffer[FRAME_BUFFER_LENGTH];
+
+bitmap_t *_bmp_create(int width, int height, int overdraw, uint8 *frameBuffer)
 {
-    printf("bmp_create: width=%d, height=%d, overdraw=%d\n", width, height, overdraw);
+   ESP_LOGD(TAG, "bmp_create: width=%d, height=%d, overdraw=%d, frameBuffer=%p", width, height, overdraw, (void *)frameBuffer);
 
    uint8 *addr;
    int pitch;
 
    pitch = width + (overdraw * 2); /* left and right */
-   //addr = malloc((pitch * height) + 3); /* add max 32-bit aligned adjustment */
-   //if (NULL == addr)
-    //  return NULL;
 
-    if (pitch * height > FRAME_BUFFER_LENGTH)
-    {
-        abort();
-    }
+   if (pitch * height > FRAME_BUFFER_LENGTH)
+   {
+       ESP_LOGE(TAG, "Invalid pitch %d and height %d!", pitch, height);
+       abort();
+   }
 
-    addr = frameBuffer;
+   addr = frameBuffer;
 
    return _make_bitmap(addr, false, width, height, width, overdraw);
+}
+
+bitmap_t *bmp_create(int width, int height, int overdraw)
+{
+   return _bmp_create(width, height, overdraw, primaryFrameBuffer);
+}
+
+bitmap_t *bmp_create_from_back_frame_buffer(int width, int height, int overdraw)
+{
+   return _bmp_create(width, height, overdraw, backFrameBuffer);
 }
 
 /* allocate and initialize a hardware bitmap */

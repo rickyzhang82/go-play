@@ -242,11 +242,12 @@ static void free_write(int num_dirties, rect_t *dirty_rects)
 static void custom_blit(bitmap_t *bmp, int num_dirties, rect_t *dirty_rects) {
    if (bmp->line[0] != NULL)
    {
-      xQueueSend(vidQueue, &(bmp->line[0]), portMAX_DELAY);
-      ESP_LOGD(TAG, "xQueueSend bmp(%p) to queue.", (void *)bmp->line[0]);
+      void* arg = (void*)(bmp->line[0]);
+      ESP_LOGD(TAG, "Sending buffer(%p) to vidQueue.", (void*)arg);
+      xQueueSend(vidQueue, &arg, portMAX_DELAY);
+      ESP_LOGD(TAG, "Sent buffer(%p) to vidQueue.", (void*)arg);
    }
 }
-
 
 //This runs on core 1.
 volatile bool exitVideoTaskFlag = false;
@@ -261,9 +262,10 @@ static void videoTask(void *arg) {
       if (hasReceivedItem)
       {
          ili9341_write_frame_nes(bmp, myPalette);
-         ESP_LOGD(TAG, "Sent bmp(%p) over SPI.", (void *)bmp);
+         ESP_LOGD(TAG, "Finished writing buffer(%p) to ili9341.", (void*)bmp);
          odroid_input_battery_level_read(&battery);
          xQueueReceive(vidQueue, &bmp, portMAX_DELAY);
+         ESP_LOGD(TAG, "Received buffer (%p) to vidQueue.", (void*)bmp);
       }
    }
 

@@ -7,9 +7,11 @@
 #include "driver/spi_master.h"
 #include "driver/ledc.h"
 #include "driver/rtc_io.h"
+#include "esp_log.h"
 
 #include <string.h>
 
+static const char *TAG = "odroid/odroid_display.c";
 
 const int DUTY_MAX = 0x1fff;
 
@@ -240,17 +242,13 @@ void send_continue_wait()
     //     assert(ret==ESP_OK);
     // }
 
-    ulTaskNotifyTake(pdTRUE, 1000 / portTICK_RATE_MS /*portMAX_DELAY*/);
+    ulTaskNotifyTake(pdTRUE, /*1000 / portTICK_RATE_MS*/ portMAX_DELAY);
 
     // Drain SPI queue
-    esp_err_t err = ESP_OK;
-    while(err == ESP_OK)
-    {
-        spi_transaction_t* trans_desc;
-        err = spi_device_get_trans_result(spi, &trans_desc, 0);
-
-        //printf("ili9341_poweroff: removed pending transfer.\n");
-    }
+    spi_transaction_t* trans_desc;
+    esp_err_t err = spi_device_get_trans_result(spi, &trans_desc, portMAX_DELAY);
+    if(err != ESP_OK)
+       ESP_LOGE(TAG, "Failed in SPI transaction.");
 
     waitForTransactions = false;
   }

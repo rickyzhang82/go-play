@@ -82,8 +82,8 @@ static bitmap_t *_make_bitmap(uint8 *data_addr, bool hw, int width,
 
 /* Allocate and initialize a bitmap structure */
 #define FRAME_BUFFER_LENGTH ((256 + 2 * 8) * 240)
-DMA_ATTR uint8 primaryFrameBuffer[FRAME_BUFFER_LENGTH];
-DMA_ATTR uint8 backFrameBuffer[FRAME_BUFFER_LENGTH];
+static uint8 primaryFrameBuffer[FRAME_BUFFER_LENGTH];
+static uint8 backFrameBuffer[FRAME_BUFFER_LENGTH];
 
 bitmap_t *_bmp_create(int width, int height, int overdraw, uint8 *frameBuffer)
 {

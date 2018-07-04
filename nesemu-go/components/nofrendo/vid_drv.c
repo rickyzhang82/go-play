@@ -367,6 +367,7 @@ void vid_flush(void)
    temp = back_buffer;
    back_buffer = primary_buffer;
    primary_buffer = temp;
+   ESP_LOGD(TAG, "Swapped double buffer: primary_buffer(%p), primary_buffer->line[0](%p).", (void*)primary_buffer, (void*)primary_buffer->line[0]);
 }
 
 /* emulated machine tells us which resolution it wants */

@@ -42,7 +42,9 @@
 
 #include "esp_system.h"
 #include "../../odroid/odroid_input.h"
+#include "esp_log.h"
 
+static const char *TAG = "nofrendo/nes/nes";
 
 #define  NES_CLOCK_DIVIDER    12
 //#define  NES_MASTER_CLOCK     21477272.727272727272
@@ -426,7 +428,7 @@ void nes_emulate(void)
           float seconds = totalElapsedTime / (CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ * 1000000.0f);
           float fps = frame / seconds;
 
-          printf("HEAP:0x%x, FPS:%f, BATTERY:%d [%d]\n", esp_get_free_heap_size(), fps, battery.millivolts, battery.percentage);
+          ESP_LOGV(TAG, "HEAP:0x%x, FPS:%f, BATTERY:%d [%d]\n", esp_get_free_heap_size(), fps, battery.millivolts, battery.percentage);
 
           frame = 0;
           totalElapsedTime = 0;

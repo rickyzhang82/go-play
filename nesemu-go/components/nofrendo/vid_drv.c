@@ -367,7 +367,7 @@ void vid_flush(void)
    temp = back_buffer;
    back_buffer = primary_buffer;
    primary_buffer = temp;
-   ESP_LOGD(TAG, "Swapped double buffer: primary_buffer(%p), primary_buffer->line[0](%p).", (void*)primary_buffer, (void*)primary_buffer->line[0]);
+   ESP_LOGV(TAG, "Swapped double buffer: primary_buffer(%p), primary_buffer->line[0](%p).", (void*)primary_buffer, (void*)primary_buffer->line[0]);
 }
 
 /* emulated machine tells us which resolution it wants */
@@ -384,7 +384,7 @@ int vid_setmode(int width, int height)
        abort();
        return -1;
    }
-   ESP_LOGD(TAG, "primary_buffer is created at %p.", (void *)primary_buffer);
+   ESP_LOGV(TAG, "primary_buffer is created at %p.", (void *)primary_buffer);
 
    /* Create our backbuffer */
    back_buffer = bmp_create_from_back_frame_buffer(width, height, 0); /* no overdraw */
@@ -393,7 +393,7 @@ int vid_setmode(int width, int height)
       bmp_destroy(&primary_buffer);
       return -1;
    }
-   ESP_LOGD(TAG, "back_buffer is created at %p.", (void *)back_buffer);
+   ESP_LOGV(TAG, "back_buffer is created at %p.", (void *)back_buffer);
 
    bmp_clear(back_buffer, GUI_BLACK);
    bmp_clear(primary_buffer, GUI_BLACK);
@@ -425,7 +425,7 @@ static int vid_findmode(int width, int height, viddriver_t *osd_driver)
    if (driver->free_write)
       driver->free_write(-1, NULL);
 
-   ESP_LOGD(TAG, "video driver: %s at %dx%d", driver->name, screen->width, screen->height);
+   ESP_LOGV(TAG, "video driver: %s at %dx%d", driver->name, screen->width, screen->height);
 
    return 0;
 }

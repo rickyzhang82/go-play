@@ -7,6 +7,7 @@
 #include "driver/spi_master.h"
 #include "driver/ledc.h"
 #include "driver/rtc_io.h"
+#include "esp_heap_alloc_caps.h"
 #include "esp_log.h"
 
 #include <string.h>
@@ -41,7 +42,7 @@ static TaskHandle_t xTaskToNotify = NULL;
 bool waitForTransactions = false;
 bool isBackLightIntialized = false;
 
-#define LINE_COUNT (5)
+#define LINE_COUNT (1)
 uint16_t* line[2];
 
 #define GAMEBOY_WIDTH (160)
@@ -69,7 +70,7 @@ typedef struct {
     uint8_t databytes; //No of data in data; bit 7 = delay after set; 0xFF = end of cmds.
 } ili_init_cmd_t;
 
-#define TFT_CMD_SWRESET	0x01
+#define TFT_CMD_SWRESET 0x01
 #define TFT_CMD_SLEEP 0x10
 #define TFT_CMD_DISPLAY_OFF 0x28
 
@@ -221,12 +222,12 @@ void send_reset_drawing(int left, int top, int width, int height)
       assert(ret==ESP_OK);
   }
 
-  // // Wait for all transactions
-  // spi_transaction_t *rtrans;
-  // for (int x = 0; x < 5; x++) {
-  //     ret=spi_device_get_trans_result(spi, &rtrans, 1000 / portTICK_RATE_MS);
-  //     assert(ret==ESP_OK);
-  // }
+  // Wait for all transactions
+  spi_transaction_t *rtrans;
+  for (int x = 0; x < 5; x++) {
+    ret=spi_device_get_trans_result(spi, &rtrans, 1000 / portTICK_RATE_MS);
+    assert(ret==ESP_OK);
+  }
 }
 
 void send_continue_wait()
@@ -296,6 +297,79 @@ void send_continue_line(uint16_t *line, int width, int lineCount)
       assert(ret==ESP_OK);
   }
 #endif
+}
+
+void send_one_line_wait()
+{
+    spi_transaction_t* trans_desc;
+    for (int x = 0; x < 6; x++)
+    {
+        esp_err_t err = spi_device_get_trans_result(spi, &trans_desc, portMAX_DELAY);
+        if(err != ESP_OK)
+            ESP_LOGE(TAG, "Failed in synchornizing SPI transaction.");
+    }
+}
+
+void send_one_line_blocking(uint16_t *line, int width, int yIndex, bool shouldWait)
+{
+    esp_err_t ret;
+
+    if (shouldWait)
+    {
+        // Drain SPI queue
+        spi_transaction_t* trans_desc;
+        for (int x = 0; x < 6; x++)
+        {
+            ESP_LOGV(TAG, "yIndex: %d, x: %d, line: %p", yIndex, x, (void*) line);
+            esp_err_t err = spi_device_get_trans_result(spi, &trans_desc, portMAX_DELAY);
+            if(err != ESP_OK)
+                ESP_LOGE(TAG, "Failed in synchornizing SPI transaction.");
+        }
+    }
+
+    for (int x = 0; x < 6; x++)
+    {
+        memset(&trans[x], 0, sizeof(spi_transaction_t));
+        if ((x&1) == 0)
+        {
+            //Even transfers are commands
+            trans[x].length = 8;
+            trans[x].user = (void*)0;
+        } else
+        {
+            //Odd transfers are data
+            trans[x].length =8 * 4;
+            trans[x].user = (void*)1;
+        }
+        trans[x].flags = SPI_TRANS_USE_TXDATA;
+    }
+
+    trans[0].tx_data[0] =0x2A;           //Column Address Set
+
+    trans[1].tx_data[0] = 0;              //Start Col High
+    trans[1].tx_data[1] = 0;              //Start Col Low
+    trans[1].tx_data[2] = (width - 1) >> 8;       //End Col High
+    trans[1].tx_data[3] = (width - 1) & 0xff;     //End Col Low
+
+    trans[2].tx_data[0] = 0x2B;           //Page address set
+
+    trans[3].tx_data[0] = yIndex >> 8;        //Start page high
+    trans[3].tx_data[1] = yIndex & 0xff;      //start page low
+    trans[3].tx_data[2] = yIndex >>8;    //end page high
+    trans[3].tx_data[3] = yIndex &0xff;  //end page low
+
+    trans[4].tx_data[0] = 0x2C;           //memory write
+
+    trans[5].tx_buffer = line;
+    trans[5].length = width * 2 * 8 * 1;
+    trans[5].flags = 0;
+
+    //Queue all transactions.
+    for (int x = 0; x < 6; x++)
+    {
+        ret = spi_device_queue_trans(spi, &trans[x], portMAX_DELAY);
+        assert(ret == ESP_OK);
+    }
 }
 
 static void backlight_init()
@@ -382,7 +456,7 @@ void backlight_percentage_set(int value)
 }
 #endif
 
-static uint16_t Blend(uint16_t a, uint16_t b)
+static inline uint16_t Blend(uint16_t a, uint16_t b)
 {
   // Big endian
   // rrrrrGGG gggbbbbb
@@ -557,14 +631,16 @@ void ili9341_init()
 {
     // Init
     const size_t lineSize = 320 * LINE_COUNT * sizeof(uint16_t);
-    line[0] = heap_caps_malloc(lineSize, MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
+    line[0] = pvPortMallocCaps(lineSize, MALLOC_CAP_DMA | MALLOC_CAP_32BIT);
     if (!line[0]) abort();
+    ESP_LOGI(TAG, "line[0]: %p", (void*)line[0]);
 
-    line[1] = heap_caps_malloc(lineSize, MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
+    line[1] = pvPortMallocCaps(lineSize, MALLOC_CAP_DMA | MALLOC_CAP_32BIT);
     if (!line[1]) abort();
+    ESP_LOGI(TAG, "line[1]: %p", (void*)line[1]);
 
 
-	// Initialize transactions
+    // Initialize transactions
     for (int x=0; x<8; x++) {
         memset(&trans[x], 0, sizeof(spi_transaction_t));
         if ((x&1)==0) {
@@ -583,7 +659,7 @@ void ili9341_init()
     esp_err_t ret;
     //spi_device_handle_t spi;
     spi_bus_config_t buscfg;
-		memset(&buscfg, 0, sizeof(buscfg));
+    memset(&buscfg, 0, sizeof(buscfg));
 
     buscfg.miso_io_num = SPI_PIN_NUM_MISO;
     buscfg.mosi_io_num = SPI_PIN_NUM_MOSI;
@@ -592,7 +668,7 @@ void ili9341_init()
     buscfg.quadhd_io_num=-1;
 
     spi_device_interface_config_t devcfg;
-		memset(&devcfg, 0, sizeof(devcfg));
+    memset(&devcfg, 0, sizeof(devcfg));
 
     devcfg.clock_speed_hz = LCD_SPI_CLOCK_RATE;
     devcfg.mode = 0;                                //SPI mode 0
@@ -612,13 +688,13 @@ void ili9341_init()
 
 
     //Initialize the LCD
-	printf("LCD: calling ili_init.\n");
+    ESP_LOGI(TAG, "LCD: calling ili_init.\n");
     ili_init();
 
-	printf("LCD: calling backlight_init.\n");
+    ESP_LOGI(TAG, "LCD: calling backlight_init.\n");
     backlight_init();
 
-    printf("LCD Initialized (%d Hz).\n", LCD_SPI_CLOCK_RATE);
+    ESP_LOGI(TAG, "LCD Initialized (%d Hz).\n", LCD_SPI_CLOCK_RATE);
 }
 
 void ili9341_poweroff()
@@ -633,7 +709,7 @@ void ili9341_poweroff()
         spi_transaction_t* trans_desc;
         err = spi_device_get_trans_result(spi, &trans_desc, 0);
 
-        printf("ili9341_poweroff: removed pending transfer.\n");
+        ESP_LOGV(TAG, "ili9341_poweroff: removed pending transfer.\n");
     }
 
 
@@ -950,7 +1026,7 @@ else
 
 //
 
-void ili9341_write_frame_nes(uint8_t* buffer, uint16_t* myPalette)
+void ili9341_write_frame_nes(uint8_t* buffer, uint16_t* myPalette, uint8_t frameParity)
 {
     short x, y;
 
@@ -961,41 +1037,33 @@ void ili9341_write_frame_nes(uint8_t* buffer, uint16_t* myPalette)
         // clear the buffer
         memset(line[0], 0x00, 320 * sizeof(uint16_t));
 
-        // clear the screen
         send_reset_drawing(0, 0, 320, 240);
 
         for (y = 0; y < 240; ++y)
         {
-            send_continue_line(line[0], 320, 1);
+            send_one_line_blocking(line[0], 320, y, y != 0);
         }
+
+        send_one_line_wait();
     }
     else
     {
         uint8_t* framePtr = buffer;
 
-        const uint16_t displayWidth = 320 - 10;
-        const uint16_t top = (240 - NES_GAME_HEIGHT) / 2;
-
-        send_reset_drawing(0, top, displayWidth, NES_GAME_HEIGHT);
-
         uint8_t alt = 0;
 
-        for (y = 0; y < NES_GAME_HEIGHT; y += LINE_COUNT)
+        const uint16_t displayWidth = 320 - 10;
+
+        for (y = frameParity; y < NES_GAME_HEIGHT; y += 2)
         {
-          int linesWritten = 0;
 
-          for (short i = 0; i < LINE_COUNT; ++i)
-          {
-              if((y + i) >= NES_GAME_HEIGHT)
-                break;
+            int index = 0;
 
-              int index = (i) * displayWidth;
+            int bufferIndex = (y  * NES_GAME_WIDTH) + 4;
 
-              int bufferIndex = ((y + i) * NES_GAME_WIDTH) + 4;
-
-              uint16_t samples[4];
-              for (x = 4; x < NES_GAME_WIDTH - 4; x += 4)
-              {
+            uint16_t samples[4];
+            for (x = 4; x < NES_GAME_WIDTH - 4; x += 4)
+            {
                 for (short j = 0; j < 4; ++j)
                 {
                     uint8_t val = framePtr[bufferIndex++];
@@ -1009,20 +1077,17 @@ void ili9341_write_frame_nes(uint8_t* buffer, uint16_t* myPalette)
                 line[alt][index++] = mid;
                 line[alt][index++] = samples[2];
                 line[alt][index++] = samples[3];
-              }
+            }
 
-              ++linesWritten;
-          }
+            // display
+            send_one_line_blocking(line[alt], displayWidth, y, y != frameParity);
 
-          // display
-          send_continue_line(line[alt], displayWidth, linesWritten);
-
-          // swap buffers
-          alt = alt ? 0 : 1;
+            // swap buffers
+            alt = alt ? 0 : 1;
         }
-    }
 
-    send_continue_wait();
+        send_one_line_wait();
+    }
 }
 
 void ili9341_write_frame(uint16_t* buffer)

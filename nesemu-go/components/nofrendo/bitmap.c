@@ -87,7 +87,7 @@ static uint8 backFrameBuffer[FRAME_BUFFER_LENGTH];
 
 bitmap_t *_bmp_create(int width, int height, int overdraw, uint8 *frameBuffer)
 {
-   ESP_LOGD(TAG, "bmp_create: width=%d, height=%d, overdraw=%d, frameBuffer=%p", width, height, overdraw, (void *)frameBuffer);
+   ESP_LOGV(TAG, "bmp_create: width=%d, height=%d, overdraw=%d, frameBuffer=%p", width, height, overdraw, (void *)frameBuffer);
 
    uint8 *addr;
    int pitch;

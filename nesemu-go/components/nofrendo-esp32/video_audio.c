@@ -239,13 +239,19 @@ static void free_write(int num_dirties, rect_t *dirty_rects)
    bmp_destroy(&myBitmap);
 }
 
+uint8_t* lcdfb = NULL;
 static void custom_blit(bitmap_t *bmp, int num_dirties, rect_t *dirty_rects) {
    if (bmp->line[0] != NULL)
    {
-      void* arg = (void*)(bmp->line[0]);
-      ESP_LOGD(TAG, "Sending buffer(%p) to vidQueue.", (void*)arg);
+      if (NULL == lcdfb)
+      {
+          lcdfb = malloc(256 * 224);
+      }
+      memcpy(lcdfb, bmp->line[0], 256 * 224);
+      void* arg = (void*)lcdfb;
+      ESP_LOGV(TAG, "Sending buffer(%p) to vidQueue.", (void*)arg);
       xQueueSend(vidQueue, &arg, portMAX_DELAY);
-      ESP_LOGD(TAG, "Sent buffer(%p) to vidQueue.", (void*)arg);
+      ESP_LOGV(TAG, "Sent buffer(%p) to vidQueue.", (void*)arg);
    }
 }
 
@@ -254,6 +260,8 @@ volatile bool exitVideoTaskFlag = false;
 static void videoTask(void *arg) {
    uint8_t* bmp = NULL;
 
+   uint8_t frameParity = 0;
+
    while(1)
    {
       BaseType_t hasReceivedItem = xQueuePeek(vidQueue, &bmp, portMAX_DELAY);
@@ -261,11 +269,12 @@ static void videoTask(void *arg) {
          break;
       if (hasReceivedItem)
       {
-         ili9341_write_frame_nes(bmp, myPalette);
-         ESP_LOGD(TAG, "Finished writing buffer(%p) to ili9341.", (void*)bmp);
+         ili9341_write_frame_nes(bmp, myPalette, frameParity);
+         frameParity = frameParity? 0: 1;
+         ESP_LOGV(TAG, "Finished writing buffer(%p) to ili9341.", (void*)bmp);
          odroid_input_battery_level_read(&battery);
          xQueueReceive(vidQueue, &bmp, portMAX_DELAY);
-         ESP_LOGD(TAG, "Received buffer (%p) to vidQueue.", (void*)bmp);
+         ESP_LOGV(TAG, "Received buffer (%p) to vidQueue.", (void*)bmp);
       }
    }
 
@@ -596,7 +605,7 @@ int osd_init()
 
 
 	ili9341_init();
-	ili9341_write_frame_nes(NULL, NULL);
+   ili9341_write_frame_nes(NULL, NULL, 0);
 
 
 	vidQueue=xQueueCreate(1, sizeof(bitmap_t *));

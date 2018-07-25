@@ -25,6 +25,8 @@ const gpio_num_t LCD_PIN_NUM_DC   = GPIO_NUM_21;
 const gpio_num_t LCD_PIN_NUM_BCKL = GPIO_NUM_14;
 const int LCD_BACKLIGHT_ON_VALUE = 1;
 const int LCD_SPI_CLOCK_RATE = 40000000;
+const uint8_t DC_BIT_MASK = 1;
+const uint8_t TRANSMISSION_COMPLETE_MASK = 1<<3;
 
 
 #define MADCTL_MY  0x80
@@ -161,12 +163,12 @@ static void ili_data(spi_device_handle_t spi, const uint8_t *data, int len)
 static void ili_spi_pre_transfer_callback(spi_transaction_t *t)
 {
     int dc=(int)t->user;
-    gpio_set_level(LCD_PIN_NUM_DC, dc);
+    gpio_set_level(LCD_PIN_NUM_DC, dc & DC_BIT_MASK);
 }
 
 static void ili_spi_post_transfer_callback(spi_transaction_t *t)
 {
-    if(xTaskToNotify && t == &trans[7])
+    if(xTaskToNotify && ((uint8_t)t->user & TRANSMISSION_COMPLETE_MASK) == TRANSMISSION_COMPLETE_MASK)
     {
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
@@ -361,6 +363,7 @@ void send_one_line_blocking(uint16_t *line, int width, int yIndex, bool shouldWa
     trans[4].tx_data[0] = 0x2C;           //memory write
 
     trans[5].tx_buffer = line;
+    trans[5].user = (void*) (DC_BIT_MASK + TRANSMISSION_COMPLETE_MASK);
     trans[5].length = width * 2 * 8 * 1;
     trans[5].flags = 0;
 

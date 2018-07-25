@@ -239,16 +239,10 @@ static void free_write(int num_dirties, rect_t *dirty_rects)
    bmp_destroy(&myBitmap);
 }
 
-uint8_t* lcdfb = NULL;
 static void custom_blit(bitmap_t *bmp, int num_dirties, rect_t *dirty_rects) {
    if (bmp->line[0] != NULL)
    {
-      if (NULL == lcdfb)
-      {
-          lcdfb = malloc(256 * 224);
-      }
-      memcpy(lcdfb, bmp->line[0], 256 * 224);
-      void* arg = (void*)lcdfb;
+      void* arg = (void*)bmp->line[0];
       ESP_LOGV(TAG, "Sending buffer(%p) to vidQueue.", (void*)arg);
       xQueueSend(vidQueue, &arg, portMAX_DELAY);
       ESP_LOGV(TAG, "Sent buffer(%p) to vidQueue.", (void*)arg);

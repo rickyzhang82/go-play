@@ -678,7 +678,6 @@ void ili9341_init()
     devcfg.spics_io_num = LCD_PIN_NUM_CS;               //CS pin
     devcfg.queue_size = 7;                          //We want to be able to queue 7 transactions at a time
     devcfg.pre_cb = ili_spi_pre_transfer_callback;  //Specify pre-transfer callback to handle D/C line
-    devcfg.post_cb = ili_spi_post_transfer_callback;
     devcfg.flags = SPI_DEVICE_HALFDUPLEX;
 
     //Initialize the SPI bus

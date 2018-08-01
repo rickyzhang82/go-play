@@ -307,6 +307,14 @@ void send_one_line_wait()
     for (int x = 0; x < 6; x++)
     {
         esp_err_t err = spi_device_get_trans_result(spi, &trans_desc, portMAX_DELAY);
+        assert(trans_desc == &trans[x]);
+        if (1 == x || 3 == x)
+        {
+            assert(trans_desc->tx_data[0] == trans[x].tx_data[0] &&
+                   trans_desc->tx_data[1] == trans[x].tx_data[1] &&
+                   trans_desc->tx_data[2] == trans[x].tx_data[2] &&
+                   trans_desc->tx_data[3] == trans[x].tx_data[3]);
+        }
         if(err != ESP_OK)
             ESP_LOGE(TAG, "Failed in synchornizing SPI transaction.");
     }
@@ -319,14 +327,7 @@ void send_one_line_blocking(uint16_t *line, int width, int yIndex, bool shouldWa
     if (shouldWait)
     {
         // Drain SPI queue
-        spi_transaction_t* trans_desc;
-        for (int x = 0; x < 6; x++)
-        {
-            ESP_LOGV(TAG, "yIndex: %d, x: %d, line: %p", yIndex, x, (void*) line);
-            esp_err_t err = spi_device_get_trans_result(spi, &trans_desc, portMAX_DELAY);
-            if(err != ESP_OK)
-                ESP_LOGE(TAG, "Failed in synchornizing SPI transaction.");
-        }
+        send_one_line_wait();
     }
 
     for (int x = 0; x < 6; x++)
